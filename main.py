@@ -3,6 +3,7 @@ import sys
 import logging
 import re
 import nltk
+from datetime import datetime
 
 from transformers import pipeline
 from keybert import KeyBERT
@@ -20,6 +21,14 @@ from utils.speaker_tagging import add_speaker_tags
 from utils.keywords import extract_keywords
 from utils.action_items import extract_action_items, extract_actions_llm
 from utils.analysis import analyze_entities_and_sentiment
+from utils.formatting import (
+    format_summary,
+    format_meeting_notes,
+    format_action_items,
+    format_keywords,
+    format_entities_and_sentiment,
+    clean_action_sentences
+)
 
 # Setup
 nltk.download("punkt")
@@ -28,6 +37,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 hf_token = os.getenv("HF_TOKEN")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
+logging.info(f"Device set to use: {device}")
 
 # Inputs
 audio_files = [
@@ -41,27 +51,46 @@ combined_text = transcribe_audio_files(audio_files, model_size="base", device=de
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn", device=0)
 executive_summary, detailed_notes = generate_meeting_notes(combined_text, summarizer)
 
-# Save summary and notes
+# Save formatted summary and notes
 os.makedirs("output", exist_ok=True)
-with open("output/meeting_summary.txt", "w", encoding="utf-8") as f:
-    f.write("=== Executive Summary ===\n\n" + executive_summary)
-with open("output/meeting_notes.txt", "w", encoding="utf-8") as f:
-    f.write("=== Detailed Meeting Notes ===\n\n" + detailed_notes)
+try:
+    with open("output/meeting_summary.txt", "w", encoding="utf-8") as f:
+        f.write(format_summary(executive_summary))
+        logging.info("Wrote meeting_summary.txt")
+
+    with open("output/meeting_notes.txt", "w", encoding="utf-8") as f:
+        f.write(format_meeting_notes(detailed_notes))
+        logging.info("Wrote meeting_notes.txt")
+except Exception as e:
+    logging.error(f"Failed writing summary or notes: {e}")
 
 # Step 3: Speaker Tagging
-tagged_transcript = add_speaker_tags(combined_text)
-with open("output/tagged_transcript.txt", "w", encoding="utf-8") as f:
-    f.write("=== Transcript with Speaker Tags ===\n\n" + tagged_transcript)
+try:
+    tagged_transcript = add_speaker_tags(combined_text)
+    with open("output/tagged_transcript.txt", "w", encoding="utf-8") as f:
+        f.write("=== Transcript with Speaker Tags ===\n\n" + tagged_transcript)
+        logging.info("Wrote tagged_transcript.txt")
+except Exception as e:
+    logging.error(f"Speaker tagging failed: {e}")
 
 # Step 4: Keyword Extraction
-keywords = extract_keywords(combined_text, top_n=20)
-with open("output/keywords.txt", "w", encoding="utf-8") as f:
-    f.write("=== Top Keywords ===\n\n" + "\n".join(keywords))
+try:
+    keywords = extract_keywords(combined_text, top_n=20)
+    with open("output/keywords.txt", "w", encoding="utf-8") as f:
+        f.write(format_keywords(keywords))
+        logging.info("Wrote keywords.txt")
+except Exception as e:
+    logging.error(f"Keyword extraction failed: {e}")
 
 # Step 5: Action Item Detection
-actions = extract_action_items(combined_text)
-with open("output/action_items.txt", "w", encoding="utf-8") as f:
-    f.write("=== Action Items ===\n\n" + ("\n".join(actions) if actions else "No action items detected."))
+try:
+    rule_based_actions = extract_action_items(combined_text)
+    cleaned_actions = clean_action_sentences(rule_based_actions)
+    with open("output/action_items.txt", "w", encoding="utf-8") as f:
+        f.write(format_action_items(rule_based=cleaned_actions))
+        logging.info("Wrote action_items.txt")
+except Exception as e:
+    logging.error(f"Action item extraction failed: {e}")
 
 # Step 6: WhisperX Diarization
 try:
@@ -80,21 +109,25 @@ try:
             for segment in result["segments"]:
                 speaker = segment.get("speaker", "Unknown")
                 f.write(f"[{speaker}] {segment['text'].strip()}\n")
+        logging.info("Wrote whisperx_speaker_transcript.txt")
 except Exception as e:
     logging.error(f"WhisperX diarization failed: {e}")
 
 # Step 7: LLM-Based Action Extraction
-llm_actions = extract_actions_llm(combined_text)
-with open("output/action_items_llm.txt", "w", encoding="utf-8") as f:
-    f.write("=== LLM-Derived Action Items ===\n\n" + llm_actions)
+try:
+    llm_actions = extract_actions_llm(combined_text)
+    with open("output/action_items_llm.txt", "w", encoding="utf-8") as f:
+        f.write(format_action_items(llm_based=llm_actions))
+        logging.info("Wrote action_items_llm.txt")
+except Exception as e:
+    logging.error(f"LLM-based action item extraction failed: {e}")
 
 # Step 8: Entity and Sentiment Analysis
-nlp = spacy.load("en_core_web_sm")
-entities, sentiment = analyze_entities_and_sentiment(tagged_transcript, nlp)
-with open("output/entities_sentiment.txt", "w", encoding="utf-8") as f:
-    f.write("=== Named Entities ===\n\n")
-    for label, ents in entities.items():
-        f.write(f"{label}: {', '.join(sorted(ents))}\n")
-    f.write("\n=== Speaker Sentiment ===\n\n")
-    for speaker, score in sentiment.items():
-        f.write(f"{speaker}: {'Positive' if score > 0 else 'Negative' if score < 0 else 'Neutral'} ({score:.2f})\n")
+try:
+    nlp = spacy.load("en_core_web_sm")
+    entities, sentiment = analyze_entities_and_sentiment(tagged_transcript, nlp)
+    with open("output/entities_sentiment.txt", "w", encoding="utf-8") as f:
+        f.write(format_entities_and_sentiment(entities, sentiment))
+        logging.info("Wrote entities_sentiment.txt")
+except Exception as e:
+    logging.error(f"Entity/sentiment analysis failed: {e}")
