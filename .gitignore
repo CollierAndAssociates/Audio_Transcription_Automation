@@ -12,6 +12,9 @@ ENV/
 env/
 .Python
 
+# Environment files
+.env
+
 # Project metadata and build
 *.log
 *.bak

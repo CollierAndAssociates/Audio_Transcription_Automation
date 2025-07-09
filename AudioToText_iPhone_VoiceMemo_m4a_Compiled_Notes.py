@@ -10,6 +10,14 @@
 # Install CUDA
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 # pip install git+https://github.com/openai/whisper.git
+#
+# pip install -U whisperx
+# pip install openai
+#
+# pip install spacy
+# python -m spacy download en_core_web_sm
+# pip install textblob
+# python -m textblob.download_corpora
 
 
 import whisper
@@ -19,6 +27,16 @@ from transformers import pipeline
 from keybert import KeyBERT
 import nltk
 import re
+import whisperx
+
+
+import openai
+import os
+
+import spacy
+from textblob import TextBlob
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 summarizer = pipeline("summarization", model="facebook/bart-large-cnn", device=0)
 sys.stdout.reconfigure(encoding='utf-8')
@@ -157,3 +175,84 @@ with open("action_items.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(actions))
     else:
         f.write("No action items detected.")
+        
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = whisperx.load_model("base", device)
+
+for audio_path in audio_files:
+    result = model.transcribe(audio_path)
+    
+    # Run diarization
+    diarize_model = whisperx.DiarizationPipeline(use_auth_token=True)  # HF token required
+    diarize_segments = diarize_model(audio_path)
+    
+    # Align speakers with text
+    result = whisperx.assign_word_speakers(diarize_segments, result["segments"])
+    
+    # Save speaker-tagged transcript
+    with open("whisperx_speaker_transcript.txt", "w", encoding="utf-8") as f:
+        for segment in result["segments"]:
+            speaker = segment.get("speaker", "Unknown")
+            f.write(f"[{speaker}] {segment['text'].strip()}\n")
+            
+def extract_actions_llm(text):
+    prompt = f"""You are an expert meeting assistant. Extract all action items from this conversation transcript.
+        Return them as a bullet list. Be concise and only include real commitments or follow-ups.
+
+Transcript:
+{text}
+"""
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3
+    )
+    return response.choices[0].message.content.strip()
+
+llm_actions = extract_actions_llm(combined_text)
+with open("action_items_llm.txt", "w", encoding="utf-8") as f:
+    f.write("=== LLM-Derived Action Items ===\n\n")
+    f.write(llm_actions)
+
+nlp = spacy.load("en_core_web_sm")
+
+def analyze_entities_and_sentiment(tagged_text):
+    entities = {}
+    sentiments = {}
+    
+    for line in tagged_text.splitlines():
+        if not line.strip(): continue
+        match = re.match(r"\[([^\]]+)\] (.+)", line)
+        if not match: continue
+        speaker, sentence = match.groups()
+        
+        # NER
+        doc = nlp(sentence)
+        for ent in doc.ents:
+            if ent.label_ not in entities:
+                entities[ent.label_] = set()
+            entities[ent.label_].add(ent.text)
+        
+        # Sentiment
+        blob = TextBlob(sentence)
+        polarity = blob.sentiment.polarity
+        sentiments.setdefault(speaker, []).append(polarity)
+
+    # Avg sentiment per speaker
+    speaker_sentiment = {
+        speaker: sum(vals)/len(vals) for speaker, vals in sentiments.items()
+    }
+
+    return entities, speaker_sentiment
+
+entities, sentiment = analyze_entities_and_sentiment(tagged_transcript)
+
+with open("entities_sentiment.txt", "w", encoding="utf-8") as f:
+    f.write("=== Named Entities ===\n\n")
+    for label, ents in entities.items():
+        f.write(f"{label}: {', '.join(sorted(ents))}\n")
+    
+    f.write("\n=== Speaker Sentiment ===\n\n")
+    for speaker, score in sentiment.items():
+        f.write(f"{speaker}: {'Positive' if score > 0 else 'Negative' if score < 0 else 'Neutral'} ({score:.2f})\n")
+          
