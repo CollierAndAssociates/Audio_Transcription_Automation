@@ -1,0 +1,62 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environment folders
+.venv/
+venv/
+ENV/
+env/
+.Python
+
+# Project metadata and build
+*.log
+*.bak
+*.tmp
+*.swp
+*.swo
+*.swn
+*.sublime-workspace
+*.sublime-project
+
+# Transcription artifacts
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+output/
+logs/
+transcripts/
+*.json
+*.txt
+
+# VSCode and PyCharm IDE settings
+.vscode/
+.idea/
+
+# Testing and coverage
+.cache/
+.pytest_cache/
+coverage.xml
+*.cover
+*.py,cover
+htmlcov/
+
+# MyPy, Pyright, Pylint
+.mypy_cache/
+.pyright/
+pylint-report.txt
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# OneDrive/Office autosave
+~$*
+
+# Git metadata
+*.orig

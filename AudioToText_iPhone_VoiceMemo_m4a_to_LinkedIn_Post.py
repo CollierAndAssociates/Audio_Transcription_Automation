@@ -1,5 +1,10 @@
-# Install necessary libraries
-# pip install openai-whisper torch transformers
+# python -m venv venv
+# .\venv\Scripts\activate
+# python -m pip install --upgrade pip
+# pip install torch
+# pip install transformers
+# pip install datasets huggingface_hub
+# pip install git+https://github.com/openai/whisper.git
 
 import whisper
 from transformers import pipeline
@@ -12,9 +17,7 @@ whisper_model = whisper.load_model("base")
 
 # List of audio file paths to process
 audio_files = [
-    r"C:\Users\andy\OneDrive - Collier & Associates\CA-Code\Excel\VendorRFI&DemoEvals\13-iphone-VoiceMemo.m4a",
-    r"C:\Users\andy\OneDrive - Collier & Associates\CA-Code\Excel\VendorRFI&DemoEvals\14-iphone-VoiceMemo.m4a",
-    r"C:\Users\andy\OneDrive - Collier & Associates\CA-Code\Excel\VendorRFI&DemoEvals\15-iphone-VoiceMemo.m4a"
+    r"C:\Users\andy\OneDrive - Collier & Associates\CA-Code\Repositories_Files\Audio_Transcription_Automation_Files\Audio\100-Unprocessed\New Recording 33.m4a"
 ]
 
 # Function to transcribe all audio files and combine the text
