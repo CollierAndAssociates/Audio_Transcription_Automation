@@ -5,11 +5,22 @@
 # pip install transformers
 # pip install datasets huggingface_hub
 # pip install git+https://github.com/openai/whisper.git
+# pip install keybert sentence-transformers nltk
+#
+# Install CUDA
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# pip install git+https://github.com/openai/whisper.git
+
 
 import whisper
 from transformers import pipeline
 import sys
+from transformers import pipeline
+from keybert import KeyBERT
+import nltk
+import re
 
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn", device=0)
 sys.stdout.reconfigure(encoding='utf-8')
 
 # Load Whisper model for transcription
@@ -89,3 +100,60 @@ print("\n=== Executive Summary ===\n")
 print(executive_summary)
 print("\n=== Detailed Meeting Notes ===\n")
 print(detailed_notes)
+
+nltk.download("punkt")
+
+# === Speaker Attribution ===
+def add_speaker_tags(text):
+    lines = nltk.sent_tokenize(text)
+    tagged = []
+    speaker = 1
+    for i, line in enumerate(lines):
+        if i % 5 == 0:  # Tag every 5 sentences as a new speaker
+            speaker += 1
+        tagged.append(f"[Speaker {speaker}] {line}")
+    return "\n".join(tagged)
+
+tagged_transcript = add_speaker_tags(combined_text)
+with open("tagged_transcript.txt", "w", encoding="utf-8") as f:
+    f.write("=== Transcript with Speaker Tags ===\n\n")
+    f.write(tagged_transcript)
+
+# === Keyword Extraction ===
+def extract_keywords(text, top_n=20):
+    kw_model = KeyBERT()
+    keywords = kw_model.extract_keywords(text, top_n=top_n, stop_words='english')
+    return [kw[0] for kw in keywords]
+
+keywords = extract_keywords(combined_text)
+with open("keywords.txt", "w", encoding="utf-8") as f:
+    f.write("=== Top Keywords ===\n\n")
+    f.write("\n".join(keywords))
+
+# === Action Item Detection ===
+def extract_action_items(text):
+    sentences = nltk.sent_tokenize(text)
+    action_items = []
+    action_starters = [
+        r"\b(we|you|I)\s+(need to|will|should|must|can)\b",
+        r"\blet's\b",
+        r"\bplease\b",
+        r"\bassign\b",
+        r"\bset up\b",
+        r"\bschedule\b",
+        r"\bmake sure\b",
+        r"\bensure\b"
+    ]
+    pattern = re.compile("|".join(action_starters), flags=re.IGNORECASE)
+    for sentence in sentences:
+        if pattern.search(sentence):
+            action_items.append("- " + sentence.strip())
+    return action_items
+
+actions = extract_action_items(combined_text)
+with open("action_items.txt", "w", encoding="utf-8") as f:
+    f.write("=== Action Items ===\n\n")
+    if actions:
+        f.write("\n".join(actions))
+    else:
+        f.write("No action items detected.")
