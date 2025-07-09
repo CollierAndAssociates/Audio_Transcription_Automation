@@ -1,177 +1,90 @@
+# utils/formatting.py
+
 from datetime import datetime
+from typing import List, Dict
 import re
-import nltk
-from nltk.tokenize import sent_tokenize
-from datetime import datetime
-from transformers import pipeline
 
-#def format_summary(summary_text):
-#    return f"""
-#==============================
-#Executive Summary Report
-#==============================
-#
-#Date: {datetime.now().strftime('%B %d, %Y')}
-#Prepared By: AI Meeting Assistant
-#
-#--- Summary ---
-#{summary_text.strip()}
-#"""
+def format_summary(summary: str) -> str:
+    return (
+        f"==============================\n"
+        f"Executive Summary Report\n"
+        f"==============================\n\n"
+        f"Date: {datetime.now().strftime('%B %d, %Y')}\n"
+        f"Prepared By: AI Meeting Assistant\n\n"
+        f"--- Summary ---\n{summary.strip()}\n"
+    )
 
-def format_summary(raw_text: str) -> str:
-    """
-    Formats a raw LLM-generated executive summary into a structured,
-    boardroom-ready report with today's date.
-    """
-    current_date = datetime.now().strftime("%B %d, %Y")  # Example: July 09, 2025
+def format_meeting_notes(notes: str) -> str:
+    return (
+        f"==============================\n"
+        f"Detailed Meeting Notes\n"
+        f"==============================\n\n"
+        f"{notes.strip()}\n"
+    )
 
-    summary = [
-        "==============================",
-        "Executive Summary Report",
-        "==============================",
-        "",
-        f"🗓️ Date: {current_date}",
-        "👤 Prepared By: AI Meeting Assistant",
-        "",
-        "---",
-        "",
-        "🔹 Objective",
-        "Brief one-line meeting objective here.",
-        "",
-        "---",
-        "",
-        "📌 Key Discussion Points",
-        "- Bullet point key insights...",
-        "",
-        "---",
-        "",
-        "✅ Next Steps",
-        "- Actionable steps with owners, if available...",
-        "",
-        "---",
-        "",
-        "🧠 Risks & Concerns",
-        "- Known blockers, challenges, or decision delays...",
-    ]
-    return "\n".join(summary)
+def format_keywords(keyword_list: List[str]) -> str:
+    return (
+        f"==============================\n"
+        f"Key Discussion Themes\n"
+        f"==============================\n\n"
+        + "\n• ".join(["• " + kw for kw in keyword_list])
+    )
 
-def format_notes(detailed_notes):
-    bullets = detailed_notes.strip().split('\n')
-    grouped = '\n'.join([f"  {line}" for line in bullets if line])
-    return f"""
-==============================
-Detailed Meeting Notes
-==============================
+def format_action_items(rule_based: List[str] = None, llm_based: str = None) -> str:
+    output = ["==============================", "Action Items Summary", "==============================\n"]
 
-{grouped}
-"""
+    if rule_based:
+        output.append("--- Rule-Based Detections ---")
+        for i, item in enumerate(rule_based, 1):
+            output.append(f"{i}. {item}")
+        output.append("")
 
-def format_meeting_notes(raw_text):
-    # Basic cleanup
-    sentences = sent_tokenize(raw_text)
-    cleaned = [re.sub(r"\b(you know|I mean|so|like|kind of|sort of|uh|um)\b", "", s, flags=re.IGNORECASE) for s in sentences]
-    
-    # Chunk into ~4-line groups
-    chunk_size = 4
-    chunks = [cleaned[i:i+chunk_size] for i in range(0, len(cleaned), chunk_size)]
+    if llm_based:
+        output.append("--- LLM-Derived Actions ---\n")
+        output.append(llm_based.strip())
 
-    output = ["==============================", "Detailed Meeting Notes", "==============================", ""]
-    for i, chunk in enumerate(chunks):
-        output.append(f"🟦 Topic {i+1}")
-        for s in chunk:
-            output.append(f"- {s.strip()}")
-        output.append("")  # spacing
-    
     return "\n".join(output)
 
-def format_action_items(rule_based=None, llm_based=None):
-    output = "==============================\nAction Items Summary\n==============================\n"
-    if rule_based:
-        output += "\n--- Rule-Based Detections ---\n"
-        for i, item in enumerate(rule_based, 1):
-            output += f"{i}. {item}\n"
-    if llm_based:
-        output += "\n--- LLM-Derived Items ---\n"
-        output += llm_based.strip() + "\n"
-    return output
+def format_entities_and_sentiment(entities: Dict[str, set], sentiment: Dict[str, float]) -> str:
+    result = ["==============================", "Entity & Sentiment Analysis", "==============================\n"]
 
-def clean_action_sentences(sentences):
+    result.append("=== Named Entities ===\n")
+    for label, ents in entities.items():
+        result.append(f"{label}: {', '.join(sorted(ents))}\n")
+
+    result.append("\n=== Speaker Sentiment ===\n")
+    for speaker, score in sentiment.items():
+        sentiment_label = (
+            "Positive" if score > 0 else "Negative" if score < 0 else "Neutral"
+        )
+        result.append(f"{speaker}: {sentiment_label} ({score:.2f})")
+
+    return "\n".join(result)
+
+def clean_action_sentences(actions: List[str]) -> List[str]:
     cleaned = []
-    for s in sentences:
-        s = s.strip("- ").strip()
-        if len(s) < 30:
-            continue  # skip trivial lines
-        if re.search(r"(make sure|need to|should|must|schedule|send|validate|review|follow up|assign|ensure)", s, re.IGNORECASE):
-            # Normalize
-            s = re.sub(r"\\b(I think|just|you know|so|okay|well|yeah|right|um)\\b", "", s, flags=re.IGNORECASE)
-            s = re.sub(r"\\s{2,}", " ", s).strip()
-            # Add placeholder for ownership
-            cleaned.append(f"- [Owner: TBD] {s}")
+    for line in actions:
+        line = re.sub(r"^[-–\s]*", "", line)  # remove leading bullets/dashes
+        line = re.sub(r"\s+", " ", line).strip()  # collapse extra whitespace
+        if line and len(line.split()) >= 3:  # filter short or junk entries
+            cleaned.append(line)
     return cleaned
 
-#def format_keywords(keyword_list):
-#    return f"""
-#==============================
-#Key Discussion Themes
-#==============================
-#
-#{chr(8226)} " + f"\n{chr(8226)} ".join(keyword_list)
-#"""
-
-def format_keywords(keyword_list):
-    bullets = "\n".join(f"• {kw}" for kw in keyword_list)
-    return f"""\
-==============================
-Key Discussion Themes
-==============================
-
-{bullets}
-"""
-
-def format_entities_and_sentiment(entities, sentiment_dict):
-    entity_block = "--- Named Entities ---\n"
-    for label, items in entities.items():
-        entity_block += f"{label}: {', '.join(sorted(items))}\n"
-
-    sentiment_block = "\n--- Speaker Sentiment ---\n"
-    for speaker, score in sentiment_dict.items():
-        tone = "Positive" if score > 0 else "Negative" if score < 0 else "Neutral"
-        sentiment_block += f"{speaker}: {tone} ({score:.2f})\n"
-
-    return f"""
-==============================
-Entity & Sentiment Overview
-==============================
-
-{entity_block}{sentiment_block}
-"""
-
-corrector = pipeline("text2text-generation", model="google/flan-t5-base")
-
-def correct_transcript_line(line: str) -> str:
-    prefix, text = line.split("] ", 1)
-    corrected = corrector(f"Fix grammar and clarity: {text}", max_length=128)[0]['generated_text']
-    return f"{prefix}] {corrected}"
-
-def enhance_tagged_transcript(raw_text: str, speaker_map: dict = None) -> str:
-    import re
-
+def enhanced_tagged_transcript(raw_text: str, speaker_map: Dict[str, str] = None) -> str:
+    """Optionally replaces speaker tags and removes junk lines."""
+    output_lines = []
     lines = raw_text.splitlines()
-    enhanced_lines = []
-
     for line in lines:
-        # Skip trivial filler lines
-        if re.fullmatch(r"\[.*?\]\s*(yeah|yes|uh|um|right|okay|just in)[.!]?", line.strip(), re.I):
-            continue
-
-        # Apply speaker mapping if available
-        if speaker_map:
-            match = re.match(r"\[(Speaker \d+)\]", line)
+        if line.startswith("[Speaker"):
+            match = re.match(r"\[Speaker (\d+)\](.*)", line)
             if match:
-                original = match.group(1)
-                name = speaker_map.get(original, original)
-                line = line.replace(original, name)
-
-        enhanced_lines.append(line)
-
-    return "\n".join(enhanced_lines)
+                speaker_id = f"Speaker {match.group(1)}"
+                text = match.group(2).strip()
+                if len(text.split()) < 3:
+                    continue  # Skip short filler
+                if speaker_map and speaker_id in speaker_map:
+                    line = f"[{speaker_map[speaker_id]}] {text}"
+                else:
+                    line = f"[{speaker_id}] {text}"
+        output_lines.append(line)
+    return "\n".join(output_lines)

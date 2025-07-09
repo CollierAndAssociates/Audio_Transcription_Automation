@@ -27,7 +27,8 @@ from utils.formatting import (
     format_action_items,
     format_keywords,
     format_entities_and_sentiment,
-    clean_action_sentences
+    clean_action_sentences,
+    enhanced_tagged_transcript
 )
 
 # Setup
@@ -67,6 +68,7 @@ except Exception as e:
 # Step 3: Speaker Tagging
 try:
     tagged_transcript = add_speaker_tags(combined_text)
+    tagged_transcript = enhanced_tagged_transcript(tagged_transcript)
     with open("output/tagged_transcript.txt", "w", encoding="utf-8") as f:
         f.write("=== Transcript with Speaker Tags ===\n\n" + tagged_transcript)
         logging.info("Wrote tagged_transcript.txt")
